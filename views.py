@@ -1,57 +1,63 @@
-from django.db import models
-from django.urls import reverse
-from products.models import Product
-# Create your models here.
-class Category(models.Model):
-    name = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=200, unique=True)
-    class Meta:
-        verbose_name_plural = 'categories'
-    def __str__(self):
-        return self.name
+from django.shortcuts import render, redirect, get_object_or_400
+from django.views.decorators.http import require_POST
+from products.models import Product, OrderItem, Order, Stripe
+from .cart import Cart
+from cart.cart import Cart
+from django.conf import settings
 
-class Product(models.Model):
-    category = models.ForeignKey(Category, related_name='products', on_delete=models.CASCADE)
-    name = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=200, unique=True)
-    image = models.ImageField(upload_data='products/%Y/%m/%d', blank=True)
-    description = models.TextField(blank=True)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    availible = models.BooleanField(default=True)
-    stock = models.PositiveIntegerField(default=0)
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-    def __str__(self):
-        return self.name
+# Create your views here.
 
-class Order(models.Model):
-    STATUS_CHOICES = (
-        ('pending', 'pendente'),
-        ('paid', 'pago'),
-        ('cancelled', 'cancelado'),
-    )
-    first_name = models.CharField(max_length=50)
-    surname = models.CharField(max_length=50)
-    email = models.EmailField()
-    address = models.CharField(max_length=250)
-    postal_code = models.CharField(max_length=20)
-    city = models.CharField(max_length=100)
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
-    class Meta:
-        ordering = ['-created']
-    def __str__(self):
-        return f'order {self.id}'
-    def get_total_cost(self):
-        return sum(item.get_cost() for item in self.items.all())
+@require_POST
+def cart_add(request, product_id):
+    cart = Cart(request)
+    product = get_object_or_400(Product, id=product_id)
+    quantity = int(request.POST.get('quantity', 1))
+    cart.add(product=product, quantity=quantity)
+    return redirect('cart:cart_detail')
 
-class OrderItem(models.Model):
-    order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, related_name='order_items', on_delete=models.CASCADE)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity = models.PositiveIntegerField(default=1)
-    def __str__(self):
-        return str(self.id)
-    def get_cost(self):
-        return self.price * self.quantity
+def cart_detail(request):
+    cart = Cart(request)
+    return render(request, 'pdv/index_detail.html', {'cart': cart})
+
+def order_create(request):
+    cart = Cart(request)
+    if request.method == 'POST':
+        # FORM PARA VALIDAÇÃO, SIMPLIFICANDO PARA FINS DIDÁTICOS
+        order = Order.objects.create (
+            first_name=request.POST.get('first_name'),
+            surname=request.POST.get('surname'),
+            email=request.POST.get('email'),
+            address=request.POST.get('address'),
+            postal_code=request.POST.get('postal_code'),
+            city=request.POST.get('city'),
+        )
+    # TRANSFERIR OS ITENS DO CARRINHO DA SESSÃO PARA O BANCO DE DADOS
+    for item in cart:
+        OrderItem.objects.create(
+            order=order,
+            product=item['product'],
+            price=item['price'],
+            quantity=item['quantity'],
+        )
+    # FUNÇÃO: LIMPAR O CARRINHO DA SESSÃO
+    cart.clear()
+    # SESSÃO DE CHECKOUT DO STRIPE (GATEWAY DE PAGAMENTO)
+    session_data = {
+        'mode': 'payment',
+        'success_url': request.build_absolute_uri('/orders/success/'),
+        'cancel_url': request.build_absolute_uri('/orders/cancel/'),
+        'line_items': [],
+    }
+    # FUNÇÃO: ADICIONAR OS ITENS DO PEDIDO NO FORMATO EXIGIDO DO STRIPE
+    for item in order.items.all():
+        session_data['line_items'].append({
+            'price_data': {
+                'unit_amount': int(item.price * 100), # O STRIPE RECEBE EM CENTAVOS
+                'currency': 'brl', # MOEDA
+                'product_data': {'name: item.product.name'},
+            }
+        })
+        checkout_session = Stripe.checkout.Session.create(**session_data)
+        # FUNÇÃO: REDIRECIONAR O CLIENTE DIRETAMENTE PARA A PÁGINA DE PAGAMENTO DO STRIPE
+        return redirect(checkout_session.url, code=303)
+    return render(request, 'orders/index_create.html', {'cart': cart})
