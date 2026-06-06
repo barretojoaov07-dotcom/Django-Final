@@ -56,3 +56,9 @@ class OrderItem(models.Model):
         return str(self.id)
     def get_cost(self):
         return self.price * self.quantity
+
+class Stripe(models.Model):
+    id_payment = models.CharField(max_length=255)
+    created_in = models.DateTimeField(auto_now_add=True)
+    def __str__(self):
+        return self.id_payment
