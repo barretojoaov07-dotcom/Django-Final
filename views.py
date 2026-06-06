@@ -2,7 +2,20 @@ from cart.models import Cart
 from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
+from django.http import HttpResponse
 from products.models import Order, OrderItem, Product, Stripe
+from django.shortcuts import render
+from .models import Product
+
+def index(request):
+    # Renderiza a página inicial (pode listar os produtos em destaque)
+    products = Product.objects.all()
+    return render(request, 'products/index.html', {'products': products})
+
+def list_products(request):
+    # Renderiza a listagem completa de produtos
+    products = Product.objects.all()
+    return render(request, 'products/list.html', {'products': products})
 
 # Create your views here.
 
@@ -60,6 +73,5 @@ def order_create(request):
             }
         })
 
-    # CRIAR SESSÃO DE CHECKOUT E REDIRECIONAR
-    checkout_session = Stripe.checkout.Session.create(**session_data)
-    return redirect(checkout_session.url, code=303)
+
+
