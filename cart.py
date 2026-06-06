@@ -56,4 +56,4 @@ class Cart:
     def clear(self):
         # FUNÇÃO: ESVAZIAR O CARRINHO
         del self.session[settings.CART_SESSION_ID]
-        self.save()
+    self.save()
