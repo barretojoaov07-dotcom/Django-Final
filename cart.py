@@ -36,7 +36,7 @@ class Cart:
     def __iter__(self):
         # FUNÇÃO: ITERAR OS PRODUTOS DO CARRINHO E BUSCAR OS PRODUTOS DO BANCO DE DADOS
         product_ids = self.cart.keys()
-        products = product.objects.filter(id__in=product_ids)
+        products = Product.objects.filter(id__in=product_ids)
         cart = self.cart.copy()
         for product in products:
             cart[str(product.id)]['product'] = product
