@@ -1,13 +1,15 @@
 from decimal import Decimal
+
 from django.conf import settings
 from products.models import Product
+
 
 class Cart:
     def __init__(self, request):
         # FUNÇÃO: INICIALIZAR O CARRINHO USANDO A SESSÃO DO DJANGO
         self.session = request.session
         cart = self.session.get(settings.CART_SESSION_ID)
-        if not cart:
+        if cart is None:
             cart = self.session[settings.CART_SESSION_ID] = {}
         self.cart = cart
     
